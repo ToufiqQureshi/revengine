@@ -1,8 +1,10 @@
-// Bookings Page - Booking Management (Shell)
-import { Plus, Search, Filter, Eye, Edit, X, MoreHorizontal } from 'lucide-react';
+// Bookings Page - Real API Integration
+import { useState, useEffect } from 'react';
+import { Plus, Search, Filter, Eye, Edit, X, MoreHorizontal, Loader2, CalendarDays } from 'lucide-react';
+import { CreateBookingDialog } from '@/components/bookings/CreateBookingDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -25,60 +27,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
+import { apiClient } from '@/api/client';
 
-// Mock data
-const mockBookings = [
-  {
-    id: 'BK-2024-001',
-    guest: { name: 'Rajesh Kumar', email: 'rajesh@email.com' },
-    room: 'Deluxe Suite',
-    checkIn: '2024-01-15',
-    checkOut: '2024-01-18',
-    status: 'confirmed',
-    total: 25500,
-    source: 'direct',
-  },
-  {
-    id: 'BK-2024-002',
-    guest: { name: 'Priya Sharma', email: 'priya@email.com' },
-    room: 'Executive Room',
-    checkIn: '2024-01-16',
-    checkOut: '2024-01-19',
-    status: 'pending',
-    total: 16500,
-    source: 'booking_engine',
-  },
-  {
-    id: 'BK-2024-003',
-    guest: { name: 'Amit Patel', email: 'amit@email.com' },
-    room: 'Standard Room',
-    checkIn: '2024-01-17',
-    checkOut: '2024-01-20',
-    status: 'checked_in',
-    total: 10500,
-    source: 'manual',
-  },
-  {
-    id: 'BK-2024-004',
-    guest: { name: 'Sunita Gupta', email: 'sunita@email.com' },
-    room: 'Deluxe Suite',
-    checkIn: '2024-01-10',
-    checkOut: '2024-01-12',
-    status: 'checked_out',
-    total: 17000,
-    source: 'direct',
-  },
-  {
-    id: 'BK-2024-005',
-    guest: { name: 'Vikram Singh', email: 'vikram@email.com' },
-    room: 'Executive Room',
-    checkIn: '2024-01-20',
-    checkOut: '2024-01-22',
-    status: 'cancelled',
-    total: 11000,
-    source: 'booking_engine',
-  },
-];
+interface BookingData {
+  id: string;
+  booking_number: string;
+  guest: {
+    first_name: string;
+    last_name: string;
+    email: string;
+  };
+  rooms: Array<{ room_type_name: string; total_price: number }>;
+  check_in: string;
+  check_out: string;
+  status: string;
+  total_amount: number;
+  source: string;
+}
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   pending: { label: 'Pending', variant: 'outline' },
@@ -89,6 +55,50 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'second
 };
 
 export function BookingsPage() {
+  const [bookings, setBookings] = useState<BookingData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const { toast } = useToast();
+
+  const fetchBookings = async () => {
+    try {
+      setIsLoading(true);
+      const params = statusFilter !== 'all' ? { status: statusFilter } : undefined;
+      const data = await apiClient.get<BookingData[]>('/bookings', params);
+      setBookings(data);
+    } catch (error) {
+      console.error('Failed to fetch bookings:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to load bookings.',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBookings();
+  }, [statusFilter]);
+
+  const handleCancelBooking = async (bookingId: string) => {
+    try {
+      await apiClient.patch(`/bookings/${bookingId}`, { status: 'cancelled' });
+      toast({
+        title: 'Booking Cancelled',
+        description: 'The booking has been cancelled.',
+      });
+      fetchBookings();
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to cancel booking.',
+      });
+    }
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -96,6 +106,15 @@ export function BookingsPage() {
       maximumFractionDigits: 0,
     }).format(amount);
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2">Loading bookings...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -107,10 +126,7 @@ export function BookingsPage() {
             View and manage all reservations
           </p>
         </div>
-        <Button className="gap-2">
-          <Plus className="h-4 w-4" />
-          New Booking
-        </Button>
+        <CreateBookingDialog onSuccess={fetchBookings} />
       </div>
 
       {/* Filters */}
@@ -119,7 +135,7 @@ export function BookingsPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search by guest name or booking ID..." className="pl-10" />
         </div>
-        <Select defaultValue="all">
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -131,83 +147,105 @@ export function BookingsPage() {
             <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
-        <Button variant="outline" className="gap-2">
+        <Button variant="outline" className="gap-2" onClick={() => toast({ title: 'Feature Coming Soon', description: 'Advanced filtering options are under development.' })}>
           <Filter className="h-4 w-4" />
           More Filters
         </Button>
       </div>
 
+      {/* Empty State */}
+      {bookings.length === 0 && (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <CalendarDays className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium">No Bookings Found</h3>
+            <p className="text-muted-foreground text-center mt-1">
+              {statusFilter !== 'all'
+                ? `No ${statusFilter} bookings found. Try changing the filter.`
+                : 'Start by creating your first booking.'}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Bookings Table */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Booking ID</TableHead>
-                <TableHead>Guest</TableHead>
-                <TableHead>Room</TableHead>
-                <TableHead>Check In</TableHead>
-                <TableHead>Check Out</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockBookings.map((booking) => (
-                <TableRow key={booking.id}>
-                  <TableCell className="font-medium">{booking.id}</TableCell>
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{booking.guest.name}</p>
-                      <p className="text-sm text-muted-foreground">{booking.guest.email}</p>
-                    </div>
-                  </TableCell>
-                  <TableCell>{booking.room}</TableCell>
-                  <TableCell>{booking.checkIn}</TableCell>
-                  <TableCell>{booking.checkOut}</TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant={statusConfig[booking.status]?.variant || 'default'}
-                      className={booking.status === 'confirmed' ? 'bg-success hover:bg-success/80' : ''}
-                    >
-                      {statusConfig[booking.status]?.label || booking.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatCurrency(booking.total)}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit Booking
-                        </DropdownMenuItem>
-                        {booking.status !== 'cancelled' && (
-                          <DropdownMenuItem className="text-destructive">
-                            <X className="mr-2 h-4 w-4" />
-                            Cancel Booking
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+      {bookings.length > 0 && (
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Booking ID</TableHead>
+                  <TableHead>Guest</TableHead>
+                  <TableHead>Room</TableHead>
+                  <TableHead>Check In</TableHead>
+                  <TableHead>Check Out</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {bookings.map((booking) => (
+                  <TableRow key={booking.id}>
+                    <TableCell className="font-medium">{booking.booking_number}</TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">
+                          {booking.guest?.first_name} {booking.guest?.last_name}
+                        </p>
+                        <p className="text-sm text-muted-foreground">{booking.guest?.email}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>{booking.rooms?.[0]?.room_type_name || 'N/A'}</TableCell>
+                    <TableCell>{booking.check_in}</TableCell>
+                    <TableCell>{booking.check_out}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={statusConfig[booking.status]?.variant || 'default'}
+                        className={booking.status === 'confirmed' ? 'bg-green-600 hover:bg-green-700' : ''}
+                      >
+                        {statusConfig[booking.status]?.label || booking.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatCurrency(booking.total_amount)}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => toast({ title: 'Details View', description: 'Booking details view coming soon.' })}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => toast({ title: 'Edit Booking', description: 'Booking modification feature coming soon.' })}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit Booking
+                          </DropdownMenuItem>
+                          {booking.status !== 'cancelled' && (
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => handleCancelBooking(booking.id)}
+                            >
+                              <X className="mr-2 h-4 w-4" />
+                              Cancel Booking
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

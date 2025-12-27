@@ -12,6 +12,7 @@ import {
   Settings,
   LogOut,
   Building2,
+  Plug,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
@@ -44,6 +45,7 @@ const mainNavItems = [
 ];
 
 const settingsNavItems = [
+  { title: 'Integration', url: '/integration', icon: Plug },
   { title: 'Settings', url: '/settings', icon: Settings },
 ];
 

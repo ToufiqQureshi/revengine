@@ -5,6 +5,7 @@ import { ApiError, AuthTokens } from '@/types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
+
 // Token storage keys
 const ACCESS_TOKEN_KEY = 'hotel_access_token';
 const REFRESH_TOKEN_KEY = 'hotel_refresh_token';
@@ -13,17 +14,17 @@ const REFRESH_TOKEN_KEY = 'hotel_refresh_token';
 export const tokenStorage = {
   getAccessToken: (): string | null => localStorage.getItem(ACCESS_TOKEN_KEY),
   getRefreshToken: (): string | null => localStorage.getItem(REFRESH_TOKEN_KEY),
-  
+
   setTokens: (tokens: AuthTokens): void => {
     localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
     localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
   },
-  
+
   clearTokens: (): void => {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
   },
-  
+
   hasTokens: (): boolean => !!localStorage.getItem(ACCESS_TOKEN_KEY),
 };
 
@@ -58,10 +59,10 @@ const getHeaders = (customHeaders?: HeadersInit): HeadersInit => {
 };
 
 // Response handler
-const handleResponse = async <T>(response: Response): Promise<T> => {
+const handleResponse = async <T>(response: Response, retryRequest?: () => Promise<Response>): Promise<T> => {
   if (!response.ok) {
     let errorData: ApiError = { detail: 'An error occurred' };
-    
+
     try {
       errorData = await response.json();
     } catch {
@@ -69,10 +70,14 @@ const handleResponse = async <T>(response: Response): Promise<T> => {
     }
 
     // Handle token expiration
-    if (response.status === 401) {
+    if (response.status === 401 && retryRequest) {
       const refreshed = await tryRefreshToken();
-      if (!refreshed) {
+      if (refreshed) {
+        const retryResponse = await retryRequest();
+        return handleResponse<T>(retryResponse);
+      } else {
         tokenStorage.clearTokens();
+        refreshAttempts = 0;
         window.location.href = '/login';
       }
     }
@@ -96,13 +101,21 @@ const handleResponse = async <T>(response: Response): Promise<T> => {
 // Token refresh logic
 let isRefreshing = false;
 let refreshPromise: Promise<boolean> | null = null;
+let refreshAttempts = 0;
+const MAX_REFRESH_ATTEMPTS = 1;
 
 const tryRefreshToken = async (): Promise<boolean> => {
   if (isRefreshing) {
     return refreshPromise!;
   }
 
+  if (refreshAttempts >= MAX_REFRESH_ATTEMPTS) {
+    return false;
+  }
+
   isRefreshing = true;
+  refreshAttempts++;
+  
   refreshPromise = (async () => {
     const refreshToken = tokenStorage.getRefreshToken();
     if (!refreshToken) {
@@ -110,11 +123,17 @@ const tryRefreshToken = async (): Promise<boolean> => {
     }
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh_token: refreshToken }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         return false;
@@ -122,6 +141,7 @@ const tryRefreshToken = async (): Promise<boolean> => {
 
       const tokens: AuthTokens = await response.json();
       tokenStorage.setTokens(tokens);
+      refreshAttempts = 0;
       return true;
     } catch {
       return false;
@@ -144,51 +164,106 @@ export const apiClient = {
       });
     }
 
-    const response = await fetch(url.toString(), {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    const makeRequest = () => fetch(url.toString(), {
       method: 'GET',
       headers: getHeaders(),
+      signal: controller.signal,
     });
 
-    return handleResponse<T>(response);
+    try {
+      const response = await makeRequest();
+      clearTimeout(timeoutId);
+      return handleResponse<T>(response, makeRequest);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
+    }
   },
 
   post: async <T>(endpoint: string, data?: unknown): Promise<T> => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    const makeRequest = () => fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
       headers: getHeaders(),
       body: data ? JSON.stringify(data) : undefined,
+      signal: controller.signal,
     });
 
-    return handleResponse<T>(response);
+    try {
+      const response = await makeRequest();
+      clearTimeout(timeoutId);
+      return handleResponse<T>(response, makeRequest);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
+    }
   },
 
   put: async <T>(endpoint: string, data?: unknown): Promise<T> => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    const makeRequest = () => fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'PUT',
       headers: getHeaders(),
       body: data ? JSON.stringify(data) : undefined,
+      signal: controller.signal,
     });
 
-    return handleResponse<T>(response);
+    try {
+      const response = await makeRequest();
+      clearTimeout(timeoutId);
+      return handleResponse<T>(response, makeRequest);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
+    }
   },
 
   patch: async <T>(endpoint: string, data?: unknown): Promise<T> => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    const makeRequest = () => fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'PATCH',
       headers: getHeaders(),
       body: data ? JSON.stringify(data) : undefined,
+      signal: controller.signal,
     });
 
-    return handleResponse<T>(response);
+    try {
+      const response = await makeRequest();
+      clearTimeout(timeoutId);
+      return handleResponse<T>(response, makeRequest);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
+    }
   },
 
   delete: async <T>(endpoint: string): Promise<T> => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    const makeRequest = () => fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'DELETE',
       headers: getHeaders(),
+      signal: controller.signal,
     });
 
-    return handleResponse<T>(response);
+    try {
+      const response = await makeRequest();
+      clearTimeout(timeoutId);
+      return handleResponse<T>(response, makeRequest);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
+    }
   },
 };
 

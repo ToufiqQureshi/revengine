@@ -21,8 +21,15 @@ import GuestsPage from "@/pages/Guests";
 import PaymentsPage from "@/pages/Payments";
 import ReportsPage from "@/pages/Reports";
 import SettingsPage from "@/pages/Settings";
+import IntegrationPage from "@/pages/Integration";
 
 import NotFound from "@/pages/NotFound";
+
+import { PublicBookingLayout } from "@/layouts/PublicBookingLayout";
+import BookingLanding from "@/pages/public/BookingLanding";
+import BookingSelection from "@/pages/public/BookingSelection";
+import BookingCheckout from "@/pages/public/BookingCheckout";
+import BookingConfirmation from "@/pages/public/BookingConfirmation";
 
 const queryClient = new QueryClient();
 
@@ -50,11 +57,20 @@ const App = () => (
               <Route path="/payments" element={<PaymentsPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/integration" element={<IntegrationPage />} />
+            </Route>
+
+            {/* Public Booking Engine Routes */}
+            <Route path="/book/:hotelSlug" element={<PublicBookingLayout />}>
+              <Route index element={<BookingLanding />} />
+              <Route path="rooms" element={<BookingSelection />} />
+              <Route path="checkout" element={<BookingCheckout />} />
+              <Route path="confirmation" element={<BookingConfirmation />} />
             </Route>
 
             {/* Redirects */}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            
+
             {/* 404 */}
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -35,10 +35,9 @@ export function ForgotPasswordPage() {
   const onSubmit = async (data: ForgotPasswordFormData) => {
     setIsLoading(true);
     try {
-      // TODO: Replace with actual API call when backend is ready
-      // await authApi.forgotPassword(data.email);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
-      
+      // Real API call
+      await authApi.forgotPassword(data.email);
+
       setSubmittedEmail(data.email);
       setIsSubmitted(true);
       toast({

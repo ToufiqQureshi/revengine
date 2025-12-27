@@ -45,7 +45,9 @@ export function LoginPage() {
       toast({
         variant: 'destructive',
         title: 'Login failed',
-        description: error instanceof Error ? error.message : 'Invalid email or password.',
+        description: error instanceof Error && error.message.includes('401')
+          ? 'Invalid email or password'
+          : 'Server not reachable or invalid credentials',
       });
     }
   };
@@ -149,15 +151,7 @@ export function LoginPage() {
           </form>
         </Card>
 
-        {/* Demo Credentials */}
-        <Card className="border-dashed bg-muted/50">
-          <CardContent className="p-4 text-center text-sm">
-            <p className="font-medium text-muted-foreground">Demo Mode</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Enter any email/password to explore the dashboard
-            </p>
-          </CardContent>
-        </Card>
+
       </div>
     </div>
   );

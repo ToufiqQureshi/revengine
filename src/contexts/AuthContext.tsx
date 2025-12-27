@@ -1,8 +1,8 @@
-// Auth Context - Global authentication state management
+// Auth Context - Real API Integration
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Hotel, LoginRequest, SignupRequest } from '@/types/api';
 import { authApi } from '@/api/auth';
-import { tokenStorage } from '@/api/client';
+import { apiClient, tokenStorage } from '@/api/client';
 
 interface AuthContextType {
   user: User | null;
@@ -17,41 +17,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock data for development (remove when backend is connected)
-const MOCK_USER: User = {
-  id: '1',
-  email: 'owner@grandhotel.com',
-  name: 'John Owner',
-  role: 'OWNER',
-  hotel_id: 'hotel_1',
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-};
-
-const MOCK_HOTEL: Hotel = {
-  id: 'hotel_1',
-  name: 'The Grand Hotel',
-  slug: 'the-grand-hotel',
-  description: 'A luxurious 5-star hotel in the heart of the city',
-  star_rating: 5,
-  address: {
-    city: 'Mumbai',
-    country: 'India',
-  },
-  contact: {
-    email: 'info@grandhotel.com',
-    phone: '+91 22 1234 5678',
-  },
-  settings: {
-    currency: 'INR',
-    timezone: 'Asia/Kolkata',
-    check_in_time: '14:00',
-    check_out_time: '11:00',
-  },
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-};
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [hotel, setHotel] = useState<Hotel | null>(null);
@@ -62,10 +27,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initAuth = async () => {
       if (tokenStorage.hasTokens()) {
         try {
+          // Fetch current user from backend
           const currentUser = await authApi.getCurrentUser();
           setUser(currentUser);
-          // TODO: Fetch hotel data based on user.hotel_id
-          setHotel(MOCK_HOTEL);
+
+          // Fetch hotel data
+          try {
+            const hotelData = await apiClient.get<Hotel>('/hotels/me');
+            setHotel(hotelData);
+          } catch {
+            console.log('Could not fetch hotel data');
+          }
         } catch {
           // Token invalid or expired
           tokenStorage.clearTokens();
@@ -80,23 +52,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = useCallback(async (credentials: LoginRequest) => {
     setIsLoading(true);
     try {
-      // TODO: Replace with actual API call when backend is ready
-      // const response = await authApi.login(credentials);
-      // setUser(response.user);
-      
-      // Mock login for development
-      console.log('Login attempt:', credentials.email);
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API delay
-      setUser(MOCK_USER);
-      setHotel(MOCK_HOTEL);
-      
-      // Store mock tokens
-      tokenStorage.setTokens({
-        access_token: 'mock_access_token',
-        refresh_token: 'mock_refresh_token',
-        token_type: 'Bearer',
-        expires_in: 3600,
-      });
+      // Call real login API
+      await authApi.login(credentials);
+
+      // Fetch user data after successful login
+      const currentUser = await authApi.getCurrentUser();
+      setUser(currentUser);
+
+      // Fetch hotel data
+      try {
+        const hotelData = await apiClient.get<Hotel>('/hotels/me');
+        setHotel(hotelData);
+      } catch {
+        console.log('Could not fetch hotel data');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -105,22 +74,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signup = useCallback(async (data: SignupRequest) => {
     setIsLoading(true);
     try {
-      // TODO: Replace with actual API call when backend is ready
-      // const response = await authApi.signup(data);
-      // setUser(response.user);
-      
-      // Mock signup for development
-      console.log('Signup attempt:', data.email, data.hotel_name);
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setUser({ ...MOCK_USER, email: data.email, name: data.name });
-      setHotel({ ...MOCK_HOTEL, name: data.hotel_name });
-      
-      tokenStorage.setTokens({
-        access_token: 'mock_access_token',
-        refresh_token: 'mock_refresh_token',
-        token_type: 'Bearer',
-        expires_in: 3600,
-      });
+      // Call real signup API
+      const response = await authApi.signup(data);
+      setUser(response.user);
+
+      // Fetch hotel data after signup
+      try {
+        const hotelData = await apiClient.get<Hotel>('/hotels/me');
+        setHotel(hotelData);
+      } catch {
+        console.log('Could not fetch hotel data');
+      }
     } finally {
       setIsLoading(false);
     }

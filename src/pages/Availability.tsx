@@ -1,9 +1,8 @@
-// Availability Page - Calendar View (Shell)
-import { ChevronLeft, ChevronRight, Edit2, Lock, Unlock } from 'lucide-react';
-import { useState } from 'react';
+// Availability Page - Real API Integration
+import { ChevronLeft, ChevronRight, Edit2, Lock, Unlock, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -11,59 +10,97 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { apiClient } from '@/api/client';
+import { useToast } from '@/hooks/use-toast';
+import { format, addDays } from 'date-fns';
 
-// Mock data
-const mockRoomTypes = [
-  { id: '1', name: 'Deluxe Suite', totalInventory: 20 },
-  { id: '2', name: 'Executive Room', totalInventory: 40 },
-  { id: '3', name: 'Standard Room', totalInventory: 60 },
-];
+interface AvailabilityDay {
+  date: string;
+  totalRooms: number;
+  bookedRooms: number;
+  availableRooms: number;
+  isBlocked: boolean;
+}
 
-const generateDates = (startDate: Date, days: number) => {
-  const dates = [];
-  for (let i = 0; i < days; i++) {
-    const date = new Date(startDate);
-    date.setDate(date.getDate() + i);
-    dates.push(date);
-  }
-  return dates;
-};
-
-const generateMockAvailability = (roomTypeId: string, totalInventory: number, dates: Date[]) => {
-  return dates.map((date) => {
-    const booked = Math.floor(Math.random() * totalInventory * 0.8);
-    const isBlocked = Math.random() < 0.05;
-    return {
-      date: date.toISOString().split('T')[0],
-      totalRooms: totalInventory,
-      bookedRooms: isBlocked ? totalInventory : booked,
-      availableRooms: isBlocked ? 0 : totalInventory - booked,
-      isBlocked,
-    };
-  });
-};
+interface RoomAvailability {
+  id: string;
+  name: string;
+  totalInventory: number;
+  availability: AvailabilityDay[];
+}
 
 export function AvailabilityPage() {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const dates = generateDates(currentMonth, 14);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [availabilityData, setAvailabilityData] = useState<RoomAvailability[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedRoomType, setSelectedRoomType] = useState('all');
+  const { toast } = useToast();
+
+  const daysToShow = 14;
+
+  const generateDates = (startDate: Date, days: number) => {
+    const dates = [];
+    for (let i = 0; i < days; i++) {
+      dates.push(addDays(startDate, i));
+    }
+    return dates;
+  };
+
+  const dates = generateDates(currentDate, daysToShow);
+
+  const fetchAvailability = async () => {
+    try {
+      setIsLoading(true);
+      const startDateStr = format(dates[0], 'yyyy-MM-dd');
+      const endDateStr = format(dates[dates.length - 1], 'yyyy-MM-dd');
+
+      const data = await apiClient.get<RoomAvailability[]>('/availability', {
+        start_date: startDateStr,
+        end_date: endDateStr
+      });
+      setAvailabilityData(data);
+    } catch (error) {
+      console.error('Failed to fetch availability:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to load availability data.'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAvailability();
+  }, [currentDate]);
 
   const getAvailabilityColor = (available: number, total: number, isBlocked: boolean) => {
     if (isBlocked) return 'bg-muted text-muted-foreground';
+    if (total === 0) return 'bg-muted text-muted-foreground';
     const ratio = available / total;
     if (ratio === 0) return 'bg-destructive/10 text-destructive';
     if (ratio < 0.3) return 'bg-warning/10 text-warning';
     return 'bg-success/10 text-success';
   };
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+  const navigateDate = (direction: 'prev' | 'next') => {
+    const newDate = addDays(currentDate, direction === 'next' ? daysToShow : -daysToShow);
+    setCurrentDate(newDate);
   };
 
-  const navigateMonth = (direction: 'prev' | 'next') => {
-    const newDate = new Date(currentMonth);
-    newDate.setDate(newDate.getDate() + (direction === 'next' ? 14 : -14));
-    setCurrentMonth(newDate);
-  };
+  const filteredData = selectedRoomType === 'all'
+    ? availabilityData
+    : availabilityData.filter(r => r.id === selectedRoomType);
+
+  if (isLoading && availabilityData.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2">Loading availability...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -72,11 +109,11 @@ export function AvailabilityPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Availability</h1>
           <p className="text-muted-foreground">
-            Manage room inventory and block dates
+            Real-time room inventory management
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => toast({ title: 'Coming Soon', description: 'Bulk editor is under development.' })}>
             <Edit2 className="h-4 w-4" />
             Bulk Edit
           </Button>
@@ -86,23 +123,23 @@ export function AvailabilityPage() {
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => navigateMonth('prev')}>
+          <Button variant="outline" size="icon" onClick={() => navigateDate('prev')}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="min-w-[200px] text-center font-medium">
-            {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            {format(currentDate, 'MMMM yyyy')}
           </span>
-          <Button variant="outline" size="icon" onClick={() => navigateMonth('next')}>
+          <Button variant="outline" size="icon" onClick={() => navigateDate('next')}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        <Select defaultValue="all">
+        <Select value={selectedRoomType} onValueChange={setSelectedRoomType}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Room Type" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Room Types</SelectItem>
-            {mockRoomTypes.map((room) => (
+            {availabilityData.map((room) => (
               <SelectItem key={room.id} value={room.id}>
                 {room.name}
               </SelectItem>
@@ -127,7 +164,7 @@ export function AvailabilityPage() {
         </div>
         <div className="flex items-center gap-2">
           <div className="h-4 w-4 rounded bg-muted"></div>
-          <span>Blocked</span>
+          <span>Blocked/None</span>
         </div>
       </div>
 
@@ -143,42 +180,49 @@ export function AvailabilityPage() {
                   key={date.toISOString()}
                   className="p-2 text-center text-xs border-l"
                 >
-                  <div className="font-medium">{formatDate(date)}</div>
+                  <div className="font-medium">{format(date, 'EEE, MMM d')}</div>
                 </div>
               ))}
             </div>
 
             {/* Room Type Rows */}
-            {mockRoomTypes.map((room) => {
-              const availability = generateMockAvailability(room.id, room.totalInventory, dates);
-              return (
-                <div
-                  key={room.id}
-                  className="grid grid-cols-[180px_repeat(14,1fr)] border-b last:border-0"
-                >
-                  <div className="p-3 flex items-center">
-                    <span className="font-medium text-sm">{room.name}</span>
-                  </div>
-                  {availability.map((day, index) => (
+            {filteredData.map((room) => (
+              <div
+                key={room.id}
+                className="grid grid-cols-[180px_repeat(14,1fr)] border-b last:border-0"
+              >
+                <div className="p-3 flex items-center">
+                  <span className="font-medium text-sm">{room.name}</span>
+                </div>
+                {/* Map over the dates array to ensure alignment, finding matching data via date string */}
+                {dates.map((date, index) => {
+                  const dayStr = format(date, 'yyyy-MM-dd');
+                  const dayData = room.availability.find(d => d.date === dayStr);
+                  // Fallback if data missing
+                  const available = dayData?.availableRooms ?? 0;
+                  const total = dayData?.totalRooms ?? 0;
+                  const isBlocked = dayData?.isBlocked ?? false;
+
+                  return (
                     <div
                       key={index}
-                      className={`p-2 border-l flex flex-col items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors ${getAvailabilityColor(day.availableRooms, day.totalRooms, day.isBlocked)}`}
+                      className={`p-2 border-l flex flex-col items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors ${getAvailabilityColor(available, total, isBlocked)}`}
                     >
-                      {day.isBlocked ? (
+                      {isBlocked ? (
                         <Lock className="h-3 w-3" />
                       ) : (
                         <>
-                          <span className="text-sm font-semibold">{day.availableRooms}</span>
+                          <span className="text-sm font-semibold">{available}</span>
                           <span className="text-[10px] text-muted-foreground">
-                            /{day.totalRooms}
+                            /{total}
                           </span>
                         </>
                       )}
                     </div>
-                  ))}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -190,15 +234,15 @@ export function AvailabilityPage() {
           <CardDescription>Select date range and room type to update</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-4">
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => toast({ title: 'Coming Soon', description: 'Available in next update.' })}>
             <Lock className="h-4 w-4" />
             Block Dates
           </Button>
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => toast({ title: 'Coming Soon', description: 'Available in next update.' })}>
             <Unlock className="h-4 w-4" />
             Unblock Dates
           </Button>
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => toast({ title: 'Coming Soon', description: 'Available in next update.' })}>
             <Edit2 className="h-4 w-4" />
             Set Inventory
           </Button>

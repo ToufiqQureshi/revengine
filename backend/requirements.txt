@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+sqlmodel
+pydantic-settings
+python-jose[cryptography]
+passlib[bcrypt]
+argon2-cffi
+aiosqlite
+asyncpg
+python-multipart
+gunicorn
+email-validator
+requests
+# bcrypt  <-- Commenting out explicit bcrypt as we use argon2 now, but passlib might still want it installed

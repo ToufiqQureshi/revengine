@@ -1,5 +1,6 @@
-// Payments Page - Payment Management (Shell)
-import { Search, CreditCard, IndianRupee, ArrowUpRight, ArrowDownRight, MoreHorizontal, Eye, Download } from 'lucide-react';
+// Payments Page - Payment Management (Real API)
+import { useState, useEffect } from 'react';
+import { Search, CreditCard, IndianRupee, ArrowUpRight, ArrowDownRight, MoreHorizontal, Eye, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,64 +26,45 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-
-// Mock data
-const mockPayments = [
-  {
-    id: 'PAY-001',
-    bookingId: 'BK-2024-001',
-    guest: 'Rajesh Kumar',
-    amount: 25500,
-    status: 'completed',
-    method: 'Credit Card',
-    date: '2024-01-15',
-  },
-  {
-    id: 'PAY-002',
-    bookingId: 'BK-2024-002',
-    guest: 'Priya Sharma',
-    amount: 16500,
-    status: 'pending',
-    method: 'UPI',
-    date: '2024-01-16',
-  },
-  {
-    id: 'PAY-003',
-    bookingId: 'BK-2024-003',
-    guest: 'Amit Patel',
-    amount: 10500,
-    status: 'completed',
-    method: 'Net Banking',
-    date: '2024-01-17',
-  },
-  {
-    id: 'PAY-004',
-    bookingId: 'BK-2024-004',
-    guest: 'Sunita Gupta',
-    amount: 17000,
-    status: 'refunded',
-    method: 'Credit Card',
-    date: '2024-01-10',
-  },
-  {
-    id: 'PAY-005',
-    bookingId: 'BK-2024-005',
-    guest: 'Vikram Singh',
-    amount: 11000,
-    status: 'failed',
-    method: 'Debit Card',
-    date: '2024-01-20',
-  },
-];
+import { apiClient } from '@/api/client';
+import { Payment } from '@/types/api';
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   completed: { label: 'Completed', variant: 'default' },
   pending: { label: 'Pending', variant: 'outline' },
   failed: { label: 'Failed', variant: 'destructive' },
   refunded: { label: 'Refunded', variant: 'secondary' },
+  partial_refund: { label: 'Partial Refund', variant: 'secondary' },
 };
 
+// Extended Payment interface for UI that includes joined fields
+interface PaymentWithDetails extends Payment {
+  booking_number: string;
+  guest_name: string;
+}
+
 export function PaymentsPage() {
+  const [payments, setPayments] = useState<PaymentWithDetails[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  useEffect(() => {
+    const fetchPayments = async () => {
+      try {
+        setIsLoading(true);
+        const data = await apiClient.get<PaymentWithDetails[]>('/payments');
+        setPayments(data);
+      } catch (error) {
+        console.error('Failed to fetch payments:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPayments();
+  }, []);
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -91,17 +73,37 @@ export function PaymentsPage() {
     }).format(amount);
   };
 
-  const totalRevenue = mockPayments
+  const filteredPayments = payments.filter(payment => {
+    const matchesSearch =
+      payment.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      payment.booking_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      payment.guest_name?.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesStatus = statusFilter === 'all' || payment.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  const totalRevenue = payments
     .filter(p => p.status === 'completed')
     .reduce((sum, p) => sum + p.amount, 0);
 
-  const pendingAmount = mockPayments
+  const pendingAmount = payments
     .filter(p => p.status === 'pending')
     .reduce((sum, p) => sum + p.amount, 0);
 
-  const refundedAmount = mockPayments
-    .filter(p => p.status === 'refunded')
+  const refundedAmount = payments
+    .filter(p => p.status === 'refunded' || p.status === 'partial_refund')
     .reduce((sum, p) => sum + p.amount, 0);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2">Loading payments...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -125,9 +127,8 @@ export function PaymentsPage() {
           <CardContent>
             <div className="text-2xl font-bold text-success">{formatCurrency(totalRevenue)}</div>
             <div className="flex items-center text-xs text-muted-foreground">
-              <ArrowUpRight className="mr-1 h-3 w-3 text-success" />
-              <span className="text-success">12.5%</span>
-              <span className="ml-1">from last month</span>
+              <span className="text-success">Live</span>
+              <span className="ml-1">from {payments.length} transactions</span>
             </div>
           </CardContent>
         </Card>
@@ -150,7 +151,7 @@ export function PaymentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-destructive">{formatCurrency(refundedAmount)}</div>
-            <p className="text-xs text-muted-foreground">This month</p>
+            <p className="text-xs text-muted-foreground">Total refunded</p>
           </CardContent>
         </Card>
       </div>
@@ -159,9 +160,14 @@ export function PaymentsPage() {
       <div className="flex flex-wrap items-center gap-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search by payment ID or booking..." className="pl-10" />
+          <Input
+            placeholder="Search by ID, booking, or guest..."
+            className="pl-10"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
-        <Select defaultValue="all">
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -178,61 +184,65 @@ export function PaymentsPage() {
       {/* Payments Table */}
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Payment ID</TableHead>
-                <TableHead>Booking</TableHead>
-                <TableHead>Guest</TableHead>
-                <TableHead>Method</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockPayments.map((payment) => (
-                <TableRow key={payment.id}>
-                  <TableCell className="font-medium">{payment.id}</TableCell>
-                  <TableCell className="text-primary">{payment.bookingId}</TableCell>
-                  <TableCell>{payment.guest}</TableCell>
-                  <TableCell>{payment.method}</TableCell>
-                  <TableCell>{payment.date}</TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant={statusConfig[payment.status]?.variant || 'default'}
-                      className={payment.status === 'completed' ? 'bg-success hover:bg-success/80' : ''}
-                    >
-                      {statusConfig[payment.status]?.label || payment.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatCurrency(payment.amount)}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Download className="mr-2 h-4 w-4" />
-                          Download Invoice
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+          {filteredPayments.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No payments found.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Booking</TableHead>
+                  <TableHead>Guest</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredPayments.map((payment) => (
+                  <TableRow key={payment.id}>
+                    <TableCell className="font-medium text-primary">{payment.booking_number}</TableCell>
+                    <TableCell>{payment.guest_name}</TableCell>
+                    <TableCell className="capitalize">{payment.payment_method || 'N/A'}</TableCell>
+                    <TableCell>{new Date(payment.created_at).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={statusConfig[payment.status]?.variant || 'default'}
+                        className={payment.status === 'completed' ? 'bg-success hover:bg-success/80' : ''}
+                      >
+                        {statusConfig[payment.status]?.label || payment.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatCurrency(payment.amount)}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem>
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <Download className="mr-2 h-4 w-4" />
+                            Download Invoice
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
