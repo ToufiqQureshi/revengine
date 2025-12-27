@@ -72,9 +72,9 @@ const IntegrationPage = () => {
         }
     };
 
-    const updateSettings = async (updates) => {
+    const updateSettings = async (updates: Partial<IntegrationSettings>) => {
         try {
-            const data = await apiClient.put('/integration/settings', updates);
+            const data = await apiClient.put<IntegrationSettings>('/integration/settings', updates);
             setSettings(data);
             toast.success('Settings updated successfully');
         } catch (error) {
@@ -89,7 +89,7 @@ const IntegrationPage = () => {
         }
 
         try {
-            const data = await apiClient.post('/integration/api-keys', { name: newKeyName });
+            const data = await apiClient.post<CreatedKey>('/integration/api-keys', { name: newKeyName });
             setCreatedKey(data);
             setNewKeyName('');
             fetchData();
