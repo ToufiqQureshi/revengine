@@ -12,7 +12,7 @@ import {
   LineChart,
   Line
 } from 'recharts';
-import { format } from 'date-fns';
+import { format, isValid } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { apiClient } from '@/api/client';
+import { apiClient, ApiClientError } from '@/api/client';
 
 interface DashboardStats {
   summary: {
@@ -56,14 +56,33 @@ export function ReportsPage() {
   const fetchStats = async () => {
     try {
       setIsLoading(true);
-      const data = await apiClient.get<DashboardStats>('/reports/dashboard', { days: Number(days) });
+      // Fix: Passed params directly as object with string values to match apiClient signature and fixing type issue
+      const data = await apiClient.get<DashboardStats>('/reports/dashboard', { days });
       setStats(data);
     } catch (error) {
       console.error('Failed to fetch stats:', error);
+
+      // Fix: Improved error handling
+      let title = 'Error';
+      let description = 'Failed to load report data.';
+
+      if (error instanceof ApiClientError) {
+        if (error.status === 401) {
+          title = 'Session Expired';
+          description = 'Please login again.';
+        } else if (error.status === 422) {
+          title = 'Invalid Request';
+          description = 'Could not process the request parameters.';
+        } else if (error.status >= 500) {
+          title = 'Server Error';
+          description = 'Something went wrong on the server.';
+        }
+      }
+
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to load report data.',
+        title,
+        description,
       });
     } finally {
       setIsLoading(false);
@@ -75,18 +94,52 @@ export function ReportsPage() {
   }, [days]);
 
   const handleExport = async () => {
-    setIsExporting(true);
-    // Simulate export - in real app, call a backend endpoint returning CSV
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setIsExporting(false);
+    if (!stats) return;
 
-    toast({
-      title: "Export Successful",
-      description: "The report has been successfully exported to CSV.",
-    });
+    try {
+      setIsExporting(true);
+
+      // Fix: Client-side CSV generation instead of fake delay
+      // Preparing CSV content
+      const headers = ['Date', 'Revenue', 'Bookings', 'Occupancy'];
+      const rows = stats.revenueChart.map(r => {
+        // Find matching occupancy
+        const occ = stats.occupancyChart.find(o => o.date === r.date)?.occupancy ?? 0;
+        return [
+          r.date,
+          r.revenue,
+          r.bookings,
+          occ
+        ].join(',');
+      });
+
+      const csvContent = [headers.join(','), ...rows].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `reports_${days}days_${format(new Date(), 'yyyy-MM-dd')}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Export Successful",
+        description: "The report has been successfully exported to CSV.",
+      });
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: "Export Failed",
+        description: "Could not export data.",
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
-  if (isLoading && !stats) {
+  // Fix: Improved loading UX - show loader when loading regardless of stats to prevent stale data
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -95,15 +148,22 @@ export function ReportsPage() {
     );
   }
 
-  // Format chart data dates
-  const revenueChartData = stats?.revenueChart.map(d => ({
+  // Helper for safe date formatting
+  const safeFormatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return isValid(date) ? format(date, 'MMM dd') : 'Invalid Date';
+  };
+
+  // Fix: Safe access to chart arrays with fallback to empty array
+  // Format chart data dates safely
+  const revenueChartData = (stats?.revenueChart || []).map(d => ({
     ...d,
-    displayDate: format(new Date(d.date), 'MMM dd')
+    displayDate: safeFormatDate(d.date)
   }));
 
-  const occupancyChartData = stats?.occupancyChart.map(d => ({
+  const occupancyChartData = (stats?.occupancyChart || []).map(d => ({
     ...d,
-    displayDate: format(new Date(d.date), 'MMM dd')
+    displayDate: safeFormatDate(d.date)
   }));
 
   return (
@@ -129,7 +189,7 @@ export function ReportsPage() {
               <SelectItem value="365">Last year</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" className="gap-2" onClick={handleExport} disabled={isExporting}>
+          <Button variant="outline" className="gap-2" onClick={handleExport} disabled={isExporting || !stats}>
             {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             Export
           </Button>
@@ -144,7 +204,8 @@ export function ReportsPage() {
             <Bed className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.summary.occupancyRate || 0}%</div>
+            {/* Fix: Use nullish coalescing operator for safe falsy handling */}
+            <div className="text-2xl font-bold">{stats?.summary.occupancyRate ?? 0}%</div>
             <p className="text-xs text-muted-foreground">For selected period</p>
           </CardContent>
         </Card>
@@ -155,7 +216,7 @@ export function ReportsPage() {
             <IndianRupee className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats?.summary.totalRevenue || 0)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(stats?.summary.totalRevenue ?? 0)}</div>
             <p className="text-xs text-muted-foreground">For selected period</p>
           </CardContent>
         </Card>
@@ -166,7 +227,7 @@ export function ReportsPage() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.summary.totalBookings || 0}</div>
+            <div className="text-2xl font-bold">{stats?.summary.totalBookings ?? 0}</div>
             <p className="text-xs text-muted-foreground">Confirmed bookings</p>
           </CardContent>
         </Card>
@@ -177,7 +238,7 @@ export function ReportsPage() {
             <IndianRupee className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats?.summary.netProfit || 0)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(stats?.summary.netProfit ?? 0)}</div>
             <p className="text-xs text-muted-foreground">~70% margin</p>
           </CardContent>
         </Card>
@@ -275,7 +336,8 @@ export function ReportsPage() {
             <CardContent>
               <div className="h-[300px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={revenueChartData}> {/* Reusing revenue data which has bookings count too if added */}
+                  {/* Fix: Reusing revenueData safely containing bookings */}
+                  <BarChart data={revenueChartData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis
                       dataKey="displayDate"
