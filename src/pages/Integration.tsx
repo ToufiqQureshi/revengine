@@ -11,14 +11,40 @@ import { Copy, Key, Code, Webhook, Globe, Plus, Trash2, Eye, EyeOff } from 'luci
 import { toast } from 'sonner';
 import { apiClient } from '@/api/client';
 
+interface ApiKey {
+    id: string;
+    name: string;
+    key_prefix: string;
+    is_active: boolean;
+    request_count: number;
+    created_at: string;
+}
+
+interface IntegrationSettings {
+    widget_enabled: boolean;
+    widget_primary_color: string;
+    allowed_domains: string;
+    webhook_url?: string;
+}
+
+interface WidgetCode {
+    html_code: string;
+    javascript_code: string;
+    instructions: string;
+}
+
+interface CreatedKey {
+    secret_key: string;
+}
+
 const IntegrationPage = () => {
-    const [settings, setSettings] = useState(null);
-    const [apiKeys, setApiKeys] = useState([]);
-    const [widgetCode, setWidgetCode] = useState(null);
+    const [settings, setSettings] = useState<IntegrationSettings | null>(null);
+    const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+    const [widgetCode, setWidgetCode] = useState<WidgetCode | null>(null);
     const [loading, setLoading] = useState(true);
     const [showNewKeyDialog, setShowNewKeyDialog] = useState(false);
     const [newKeyName, setNewKeyName] = useState('');
-    const [createdKey, setCreatedKey] = useState(null);
+    const [createdKey, setCreatedKey] = useState<CreatedKey | null>(null);
 
     useEffect(() => {
         fetchData();
@@ -27,15 +53,15 @@ const IntegrationPage = () => {
     const fetchData = async () => {
         try {
             // Fetch integration settings
-            const settingsData = await apiClient.get('/integration/settings');
+            const settingsData = await apiClient.get<IntegrationSettings>('/integration/settings');
             setSettings(settingsData);
 
             // Fetch API keys
-            const keysData = await apiClient.get('/integration/api-keys');
+            const keysData = await apiClient.get<ApiKey[]>('/integration/api-keys');
             setApiKeys(keysData);
 
             // Fetch widget code
-            const widgetData = await apiClient.get('/integration/widget-code');
+            const widgetData = await apiClient.get<WidgetCode>('/integration/widget-code');
             setWidgetCode(widgetData);
 
             setLoading(false);
