@@ -100,10 +100,11 @@ export interface RoomType {
 }
 
 export interface RoomPhoto {
-  id: string;
+  id?: string;
   url: string;
   caption?: string;
-  sort_order: number;
+  is_primary: boolean;
+  order: number;
 }
 
 export interface Amenity {

@@ -27,6 +27,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { apiClient } from '@/api/client';
 import { RoomType } from '@/types/api';
 import { useToast } from '@/hooks/use-toast';
+import { RoomImageUploader } from './RoomImageUploader';
 
 const roomSchema = z.object({
     name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -37,6 +38,13 @@ const roomSchema = z.object({
     max_occupancy: z.coerce.number().min(1, 'At least 1 person'),
     max_children: z.coerce.number().min(0, 'Cannot be negative'),
     extra_bed_allowed: z.boolean().default(false),
+    photos: z.array(z.object({
+        id: z.string().optional(),
+        url: z.string(),
+        caption: z.string().optional(),
+        is_primary: z.boolean(),
+        order: z.number(),
+    })).default([]),
 });
 
 interface RoomDialogProps {
@@ -61,6 +69,7 @@ export function RoomDialog({ open, onOpenChange, onSuccess, initialData }: RoomD
             max_occupancy: 2,
             max_children: 0,
             extra_bed_allowed: false,
+            photos: [],
         },
     });
 
@@ -76,6 +85,7 @@ export function RoomDialog({ open, onOpenChange, onSuccess, initialData }: RoomD
                     max_occupancy: initialData.max_occupancy,
                     max_children: initialData.max_children || 0,
                     extra_bed_allowed: initialData.extra_bed_allowed || false,
+                    photos: initialData.photos || [],
                 });
             } else {
                 form.reset({
@@ -87,6 +97,7 @@ export function RoomDialog({ open, onOpenChange, onSuccess, initialData }: RoomD
                     max_occupancy: 2,
                     max_children: 0,
                     extra_bed_allowed: false,
+                    photos: [],
                 });
             }
         }
@@ -115,7 +126,7 @@ export function RoomDialog({ open, onOpenChange, onSuccess, initialData }: RoomD
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>{isEditing ? 'Edit Room Type' : 'Add Room Type'}</DialogTitle>
                     <DialogDescription>
@@ -123,121 +134,154 @@ export function RoomDialog({ open, onOpenChange, onSuccess, initialData }: RoomD
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                        <FormField
-                            control={form.control}
-                            name="name"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Room Name</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="e.g. Deluxe Suite" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="description"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Description</FormLabel>
-                                    <FormControl>
-                                        <Textarea placeholder="Room amenities and details..." {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <div className="grid grid-cols-2 gap-4">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+
+                        {/* Basic Info */}
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-medium text-muted-foreground border-b pb-2">Basic Information</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="name"
+                                    render={({ field }) => (
+                                        <FormItem className="col-span-2">
+                                            <FormLabel>Room Name</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="e.g. Deluxe Suite" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="description"
+                                    render={({ field }) => (
+                                        <FormItem className="col-span-2">
+                                            <FormLabel>Description</FormLabel>
+                                            <FormControl>
+                                                <Textarea placeholder="Room amenities and details..." {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Images */}
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-medium text-muted-foreground border-b pb-2">Room Photos</h3>
                             <FormField
                                 control={form.control}
-                                name="base_price"
+                                name="photos"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Base Price (₹)</FormLabel>
                                         <FormControl>
-                                            <Input type="number" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="total_inventory"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Total Rooms</FormLabel>
-                                        <FormControl>
-                                            <Input type="number" {...field} />
+                                            <RoomImageUploader
+                                                images={field.value}
+                                                onChange={field.onChange}
+                                            />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )}
                             />
                         </div>
-                        <div className="grid grid-cols-3 gap-4">
+
+                        {/* Capacity & Pricing */}
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-medium text-muted-foreground border-b pb-2">Capacity & Pricing</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="base_price"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Base Price (₹)</FormLabel>
+                                            <FormControl>
+                                                <Input type="number" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="total_inventory"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Total Rooms</FormLabel>
+                                            <FormControl>
+                                                <Input type="number" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="base_occupancy"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Base Occ.</FormLabel>
+                                            <FormControl>
+                                                <Input type="number" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="max_occupancy"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Max Occ.</FormLabel>
+                                            <FormControl>
+                                                <Input type="number" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="max_children"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Max Child</FormLabel>
+                                            <FormControl>
+                                                <Input type="number" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
                             <FormField
                                 control={form.control}
-                                name="base_occupancy"
+                                name="extra_bed_allowed"
                                 render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Base Occ.</FormLabel>
+                                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
                                         <FormControl>
-                                            <Input type="number" {...field} />
+                                            <Checkbox
+                                                checked={field.value}
+                                                onCheckedChange={field.onChange}
+                                            />
                                         </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="max_occupancy"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Max Occ.</FormLabel>
-                                        <FormControl>
-                                            <Input type="number" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="max_children"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Max Child</FormLabel>
-                                        <FormControl>
-                                            <Input type="number" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
+                                        <div className="space-y-1 leading-none">
+                                            <FormLabel>
+                                                Extra Bed Allowed
+                                            </FormLabel>
+                                        </div>
                                     </FormItem>
                                 )}
                             />
                         </div>
-                        <FormField
-                            control={form.control}
-                            name="extra_bed_allowed"
-                            render={({ field }) => (
-                                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                                    <FormControl>
-                                        <Checkbox
-                                            checked={field.value}
-                                            onCheckedChange={field.onChange}
-                                        />
-                                    </FormControl>
-                                    <div className="space-y-1 leading-none">
-                                        <FormLabel>
-                                            Extra Bed Allowed
-                                        </FormLabel>
-                                    </div>
-                                </FormItem>
-                            )}
-                        />
+
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                                 Cancel
